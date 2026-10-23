@@ -1,7 +1,9 @@
+import {ENVIRONMENTS,applyEnvironment} from './environments.mjs';
+import {saveSceneData,loadSceneData} from './storage.mjs';
 import {World,MAX_BALLS} from './physics.mjs';
 import {captureScene,restoreScene} from './scene.mjs';
 const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s),canvas=$('#world'),ctx=canvas.getContext('2d'),wrap=$('#canvas-wrap');
-const world=new World();let tool='throw',size='random',direction='down',paused=false,raining=false,showTrails=false,drag=null,frame=0,last=0,acc=0,rainClock=0,toastTimer,chaosClock=0,chaos=false,watching=false;
+const world=new World();let tool='throw',size='random',direction='down',paused=false,raining=false,showTrails=false,drag=null,frame=0,last=0,acc=0,rainClock=0,toastTimer,chaosClock=0,chaos=false,watching=false,environment='earth';
 const dirs={up:[0,-1,'위로 ↑'],right:[1,0,'오른쪽 →'],down:[0,1,'아래로 ↓'],left:[-1,0,'왼쪽 ←'],zero:[0,0,'무중력 ✧']};
 function toast(s){$('#toast').textContent=s;$('#toast').classList.add('visible');clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('#toast').classList.remove('visible'),2300);}
 function resize(){const r=canvas.getBoundingClientRect(),w=r.width,h=r.height,oldW=world.width,oldH=world.height;world.width=w;world.height=h;const dpr=Math.min(window.devicePixelRatio||1,2);canvas.width=Math.round(w*dpr);canvas.height=Math.round(h*dpr);ctx.setTransform(dpr,0,0,dpr,0,0);for(const b of world.balls){b.x*=w/oldW;b.y*=h/oldH;b.trail=[];world.boundary(b);}for(const hole of world.holes){hole.x*=w/oldW;hole.y*=h/oldH;}}
@@ -12,7 +14,7 @@ function shower(n){for(let i=0;i<n;i++)add(35+Math.random()*(world.width-70),40+
 function seed(){for(let i=0;i<44;i++)world.add(35+Math.random()*(world.width-70),55+Math.random()*(world.height-125),9+Math.random()*19,(Math.random()-.5)*380,(Math.random()-.5)*200);updateCounts();}
 function updateCounts(){$('#ball-count').textContent=world.balls.length;$('#hole-count').textContent=world.holes.filter(h=>h.kind!=='white').length;$('#white-count').textContent=world.holes.filter(h=>h.kind==='white').length;}
 function paintRange(el){const n=(Number(el.value)-Number(el.min))/(Number(el.max)-Number(el.min))*100;el.style.background=`linear-gradient(to right, ${el.id==='attraction'?'#a18abb':'#ee795f'} ${n}%, #eaeae3 ${n}%)`;}
-function clearPreset(){chaos=false;$$('[data-preset]').forEach(b=>{b.classList.remove('active');b.setAttribute('aria-pressed','false');});}
+function clearPreset(){chaos=false;environment=null;world.medium='normal';document.body.dataset.environment='custom';$('#environment-note').textContent='내 맘대로 · 중력과 탄성을 자유롭게';$$('[data-preset]').forEach(b=>{b.classList.remove('active');b.setAttribute('aria-pressed','false');});}
 function setGravity(dir=direction){direction=dir;const g=Number($('#gravity').value);world.gx=dirs[dir][0]*g*900;world.gy=dirs[dir][1]*g*900;const val=dir==='zero'?0:g;$('#gravity-label').textContent=val===0?'무중력 ✧':dirs[dir][2];$('#gravity-value').textContent=val.toFixed(1)+' g';$('#g-readout').innerHTML=val.toFixed(1)+'<span>g</span>';$$('[data-dir]').forEach(b=>{const active=b.dataset.dir===dir;b.classList.toggle('active',active);b.setAttribute('aria-pressed',active);});paintRange($('#gravity'));}
 $$('[data-dir]').forEach(b=>b.onclick=()=>{clearPreset();setGravity(b.dataset.dir);});
 $('#gravity').oninput=()=>{clearPreset();setGravity(direction==='zero'?'down':direction);};
@@ -24,7 +26,17 @@ $$('[data-size]').forEach(b=>b.onclick=()=>{size=b.dataset.size;$('#size-value')
 function releaseDrag(){if(drag?.ball)drag.ball.held=false;drag=null;}
 function selectTool(t){releaseDrag();tool=t;$$('[data-tool]').forEach(b=>{b.classList.toggle('active',b.dataset.tool===t);b.setAttribute('aria-pressed',b.dataset.tool===t);});$('#hint').textContent=({throw:'클릭하면 공이 톡! 드래그하면 쓱 날아가요.',grab:'공을 잡아 옮긴 뒤 놓으면, 휙! 날아가요.',hole:'빈 곳을 눌러 블랙홀 설치. 다시 누르면 사라져요.',white:'블랙홀이 삼킨 공이 여기서 나와요. 다시 누르면 삭제.'})[t];$('#hint-icon').textContent=({throw:'↗',grab:'✥',hole:'◉',white:'◎'})[t];canvas.style.cursor=t==='grab'?'grab':'crosshair';}
 $$('[data-tool]').forEach(b=>b.onclick=()=>selectTool(b.dataset.tool));
-function preset(name){releaseDrag();chaos=name==='chaos';chaosClock=0;$$('[data-preset]').forEach(b=>{b.classList.toggle('active',b.dataset.preset===name);b.setAttribute('aria-pressed',b.dataset.preset===name);});$('#gravity').value=({earth:1,moon:.2,space:0,chaos:1.4})[name];setGravity(name==='space'?'zero':'down');setBounce(name==='space'?98:name==='chaos'?96:80);if(name==='space'||name==='chaos')for(const b of world.balls){b.vx+=(Math.random()-.5)*500;b.vy-=200+Math.random()*350;}toast(({earth:'익숙한 지구, 1.0 g',moon:'달처럼 가볍게, 0.2 g',space:'중력 OFF. 마음껏 둥둥.',chaos:'3초마다 중력이 돌아가요!'})[name]);}
+function showEnvironment(name){
+ const env=ENVIRONMENTS[name];document.body.dataset.environment=name||'custom';
+ $('#environment-note').textContent=env?env.note:'내 맘대로 · 중력과 탄성을 자유롭게';
+ $$('[data-preset]').forEach(b=>{b.classList.toggle('active',b.dataset.preset===name);b.setAttribute('aria-pressed',b.dataset.preset===name);});
+}
+function preset(name){
+ releaseDrag();const env=applyEnvironment(world,name);environment=name;chaos=name==='chaos';chaosClock=0;
+ showEnvironment(name);$('#gravity').value=env.gravity;setGravity(name==='space'?'zero':'down');setBounce(env.bounce);
+ if(env.kick)for(const b of world.balls){b.vx+=(Math.random()-.5)*500;b.vy-=200+Math.random()*350;}
+ toast(env.note);
+}
 $$('[data-preset]').forEach(b=>b.onclick=()=>preset(b.dataset.preset));
 function setPaused(v){paused=v;$('#pause').textContent=v?'▷':'Ⅱ';$('#pause').setAttribute('aria-label',v?'재생':'일시정지');$('#pause').title=v?'재생 (Space)':'일시정지 (Space)';$('#paused-label').hidden=!v;$('#play-state').textContent=v?'EXPERIMENT PAUSED':'LIVE EXPERIMENT';}
 $('#pause').onclick=()=>setPaused(!paused);$('#burst').onclick=()=>shower(30);
@@ -53,13 +65,13 @@ function setWatching(value){
  else $('#watch').focus({preventScroll:true});
 }
 $('#watch').onclick=()=>setWatching(true);$('#exit-watch').onclick=()=>setWatching(false);
-$('#save-layout').onclick=()=>{
- try{localStorage.setItem('mamdaero-scene-v1',JSON.stringify(captureScene(world,{size,direction,gravity:Number($('#gravity').value),raining,showTrails,chaos})));toast('지금의 공과 배치를 저장했어요.');}
- catch{toast('브라우저 저장 공간을 사용할 수 없어요.');}
+$('#save-layout').onclick=async()=>{
+ try{await saveSceneData(JSON.stringify(captureScene(world,{size,direction,gravity:Number($('#gravity').value),raining,showTrails,chaos,environment})));toast('지금의 공과 배치를 저장했어요.');}
+ catch{toast('저장 공간을 사용할 수 없어요.');}
 };
-$('#load-layout').onclick=()=>{
- try{const raw=localStorage.getItem('mamdaero-scene-v1');if(!raw){toast('먼저 마음에 드는 배치를 저장해보세요.');return;}
- const settings=restoreScene(world,JSON.parse(raw));releaseDrag();clearPreset();
+$('#load-layout').onclick=async()=>{
+ try{const raw=await loadSceneData();if(!raw){toast('먼저 마음에 드는 배치를 저장해보세요.');return;}
+ const settings=restoreScene(world,JSON.parse(raw));releaseDrag();environment=settings.environment;showEnvironment(environment);
  $('#gravity').value=settings.gravity;setGravity(settings.direction);setBounce(world.restitution*100);
  $('#attraction').value=world.attraction;$('#attraction').dispatchEvent(new Event('input'));
  $('[data-size="'+settings.size+'"]').click();raining=settings.raining;$('#rain').setAttribute('aria-pressed',raining);$('#rain').textContent=raining?'☂ 공 비 멈추기':'☂ 공 비 내리기';
@@ -87,5 +99,5 @@ function draw(t){ctx.clearRect(0,0,world.width,world.height);if(showTrails){for(
  for(const b of world.balls){ctx.save();ctx.translate(b.x,b.y);ctx.shadowColor='#46534318';ctx.shadowBlur=4;ctx.shadowOffsetY=3;const grad=ctx.createRadialGradient(-b.r*.35,-b.r*.4,b.r*.05,0,0,b.r);grad.addColorStop(0,lighten(b.color));grad.addColorStop(.6,b.color);grad.addColorStop(1,b.color);ctx.fillStyle=grad;ctx.beginPath();ctx.arc(0,0,b.r,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;ctx.shadowOffsetY=0;ctx.strokeStyle='#ffffff4d';ctx.lineWidth=.8;ctx.stroke();ctx.beginPath();ctx.ellipse(-b.r*.3,-b.r*.4,b.r*.23,b.r*.13,-.6,0,Math.PI*2);ctx.fillStyle='#ffffff45';ctx.fill();if(b.held){ctx.beginPath();ctx.arc(0,0,b.r+5,0,Math.PI*2);ctx.strokeStyle='#657d60';ctx.setLineDash([3,3]);ctx.stroke();}ctx.restore();}
  if(drag&&!drag.ball){const a=drag.start,b=drag.current;ctx.save();ctx.strokeStyle='#6b8170';ctx.fillStyle='#6b817025';ctx.lineWidth=1.5;ctx.setLineDash([4,5]);ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();ctx.setLineDash([]);ctx.beginPath();ctx.arc(a.x,a.y,16,0,Math.PI*2);ctx.fill();ctx.stroke();const angle=Math.atan2(b.y-a.y,b.x-a.x);ctx.beginPath();ctx.moveTo(b.x-10*Math.cos(angle-.5),b.y-10*Math.sin(angle-.5));ctx.lineTo(b.x,b.y);ctx.lineTo(b.x-10*Math.cos(angle+.5),b.y-10*Math.sin(angle+.5));ctx.stroke();ctx.restore();}}
 const colorCache=new Map();function lighten(hex){if(colorCache.has(hex))return colorCache.get(hex);const nums=hex.slice(1).match(/../g).map(x=>Math.round(parseInt(x,16)*.65+255*.35));const result=`rgb(${nums.join(',')})`;colorCache.set(hex,result);return result;}
-let simTime=0;function loop(now){const dt=last?Math.min((now-last)/1000,.05):0;last=now;if(!paused&&!dialog.open){simTime+=dt;acc+=dt;if(raining){rainClock+=dt;while(rainClock>.055){rainClock-=.055;add(25+Math.random()*(world.width-50),25,(Math.random()-.5)*200,90);}}if(chaos){chaosClock+=dt;if(chaosClock>3){chaosClock=0;const d=['down','left','up','right'];setGravity(d[(d.indexOf(direction)+1)%4]);}}while(acc>=1/180){world.step(1/180);acc-=1/180;}if(showTrails&&frame%2===0)for(const b of world.balls){b.trail.push({x:b.x,y:b.y});if(b.trail.length>24)b.trail.shift();}}else acc=0;draw(simTime);if(frame++%10===0)updateCounts();requestAnimationFrame(loop);}
-setGravity();setBounce(80);paintRange($('#attraction'));selectTool('throw');$$('[data-size]').forEach(b=>b.setAttribute('aria-pressed',b.classList.contains('active')));$$('[data-preset]').forEach(b=>b.setAttribute('aria-pressed',b.classList.contains('active')));seed();requestAnimationFrame(loop);
+let simTime=0;function loop(now){const dt=last?Math.min((now-last)/1000,.05):0;last=now;if(!paused&&!dialog.open){simTime+=dt;acc+=dt;if(raining){rainClock+=dt;while(rainClock>.055){rainClock-=.055;add(25+Math.random()*(world.width-50),25,(Math.random()-.5)*200,90);}}if(chaos){chaosClock+=dt;if(chaosClock>3){chaosClock=0;const d=['down','left','up','right'];setGravity(d[(d.indexOf(direction)+1)%4]);}}while(acc>=1/240){world.step(1/240);acc-=1/240;}if(showTrails&&frame%2===0)for(const b of world.balls){b.trail.push({x:b.x,y:b.y});if(b.trail.length>24)b.trail.shift();}}else acc=0;draw(simTime);if(frame++%10===0)updateCounts();requestAnimationFrame(loop);}
+showEnvironment('earth');setGravity();setBounce(80);paintRange($('#attraction'));selectTool('throw');$$('[data-size]').forEach(b=>b.setAttribute('aria-pressed',b.classList.contains('active')));$$('[data-preset]').forEach(b=>b.setAttribute('aria-pressed',b.classList.contains('active')));seed();requestAnimationFrame(loop);

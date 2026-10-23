@@ -12,5 +12,5 @@ test('saved scene restores positions proportionally and retains settings and app
 test('invalid stored scenes are rejected without changing the current playground',()=>{
  const w=new World(),b=w.add(200,200);w.holes=[{x:100,y:100,kind:'black',phase:1,r:17}];
  const saved=captureScene(w,settings);
- for(const corrupt of [null,{...saved,version:99},{...saved,balls:[{...saved.balls[0],x:NaN}]},{...saved,holes:[{x:.5,y:.5,kind:'bad',phase:1}]},{...saved,settings:{...saved.settings,gravity:20}}]){assert.throws(()=>restoreScene(w,corrupt));assert.equal(w.balls[0],b);assert.equal(w.holes.length,1);}
+ for(const corrupt of [null,{...saved,version:99},{...saved,balls:[{...saved.balls[0],x:NaN}]},{...saved,holes:[{x:.5,y:.5,kind:'bad',phase:1}]},{...saved,settings:{...saved.settings,gravity:31}}]){assert.throws(()=>restoreScene(w,corrupt));assert.equal(w.balls[0],b);assert.equal(w.holes.length,1);}
 });
