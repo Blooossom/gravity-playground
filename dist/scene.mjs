@@ -1,3 +1,4 @@
+import {BACKDROP_NAMES} from './backdrops.mjs';
 import {ENVIRONMENTS} from './environments.mjs';
 import {World,MAX_BALLS,COLORS} from './physics.mjs';
 export function captureScene(world,settings){
@@ -9,7 +10,8 @@ export function restoreScene(world,data){
  const fail=()=>{throw new Error('Invalid saved scene');};
  const num=(n,min,max)=>Number.isFinite(n)&&n>=min&&n<=max;
  if(!data||data.version!==1||!data.settings||!Array.isArray(data.balls)||data.balls.length>MAX_BALLS||!Array.isArray(data.holes)||data.holes.length>12)fail();
- const s={...data.settings,environment:data.settings.environment??null};
+ const s={...data.settings,environment:data.settings.environment??null,backdrop:data.settings.backdrop??data.settings.environment??'earth'};
+ if(!BACKDROP_NAMES.includes(s.backdrop))fail();
  if(s.environment!==null&&!Object.hasOwn(ENVIRONMENTS,s.environment))fail();
  if(!['small','medium','large','random'].includes(s.size)||!['up','right','down','left','zero'].includes(s.direction)||!num(s.gravity,0,30)||!num(s.restitution,0,1)||!num(s.attraction,.2,10)||['raining','showTrails','chaos'].some(k=>typeof s[k]!=='boolean'))fail();
  for(const b of data.balls)if(!b||!num(b.x,0,1)||!num(b.y,0,1)||!num(b.r,7,28)||!num(b.vx,-4000,4000)||!num(b.vy,-4000,4000)||!COLORS.includes(b.color))fail();

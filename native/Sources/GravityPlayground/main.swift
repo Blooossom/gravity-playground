@@ -54,7 +54,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         view.addItem(withTitle: "최소화", action: #selector(NSWindow.miniaturize(_:)), keyEquivalent: "m")
         NSApp.mainMenu = main
     }
-    @objc private func about() { NSApp.orderFrontStandardAboutPanel(options: [.applicationName:"맘대로 — 중력 놀이터",.applicationVersion:"1.0",.credits:NSAttributedString(string:"공을 던지고, 중력을 돌리고, 우주를 구경해요.\n오프라인으로 실행되는 나만의 놀이터.")]) }
+    @objc private func about() { NSApp.orderFrontStandardAboutPanel(options: [.applicationName:"맘대로 — 중력 놀이터",.applicationVersion:Bundle.main.object(forInfoDictionaryKey:"CFBundleShortVersionString") as? String ?? "1.1",.credits:NSAttributedString(string:"공을 던지고, 중력을 돌리고, 우주를 구경해요.\n오프라인으로 실행되는 나만의 놀이터.")]) }
     @objc private func saveScene() { web.evaluateJavaScript("document.querySelector('#save-layout').click()") }
     @objc private func loadScene() { web.evaluateJavaScript("document.querySelector('#load-layout').click()") }
     @objc private func watch() { web.evaluateJavaScript("setWatching(!watching)") }
@@ -94,7 +94,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         check(world.balls.length===44,'initial scene');
         check(document.querySelector('#gravity').max==='30','30g limit');
         check(document.querySelector('#attraction').max==='10','10x limit');
-        for(const name of Object.keys(ENVIRONMENTS)) { preset(name);check(environment===name,'preset '+name); }
+        const backgrounds={};const signatures=new Set();
+        for(const name of Object.keys(ENVIRONMENTS)) {
+            preset(name);check(environment===name&&backdrop===name,'preset backdrop '+name);
+            const preview=document.createElement('canvas');preview.width=900;preview.height=560;
+            const previewContext=preview.getContext('2d');
+            scenery.changedAt=-1000;scenery.draw(previewContext,900,560,12);
+            backgrounds[name]=preview.toDataURL('image/png');
+            signatures.add(Array.from(previewContext.getImageData(80,80,1,1).data).join(','));
+        }
+        check(signatures.size===8,'distinct rendered backgrounds');
+        preset('water');clearPreset();check(backdrop==='water','manual gravity preserves scenery');
         preset('water');check(world.medium==='water','water drag');
         preset('storm');check(world.medium==='storm','storm force');
         setWatching(true);check(document.body.classList.contains('watch-mode'),'watch enter');
@@ -103,11 +113,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         world.holes=[{x:100,y:100,r:17,kind:'black',phase:0},{x:400,y:150,r:17,kind:'white',phase:0}];
         world.balls=[];world.add(100,100,12);world.step(1/240);check(world.recycled===1,'white hole recycle');
         check(world.balls.length===1,'ball retained');
-        const snapshot=captureScene(world,{size,direction,gravity:28,raining:true,showTrails:true,chaos:false,environment:'sun'});
+        const snapshot=captureScene(world,{size,direction,gravity:28,raining:true,showTrails:true,chaos:false,environment:'sun',backdrop:'sun'});
         await saveSceneData(JSON.stringify(snapshot));
         const saved=JSON.parse(await loadSceneData());check(saved.settings.gravity===28&&saved.holes.length===2,'native persistence');
         world.balls=[];restoreScene(world,saved);check(world.balls.length===1,'restore');
-        return 'PASS: bundled offline page, 8 presets, 30g/10x controls, watch mode, white hole, native save/load';
+        return {message:'PASS: offline page, 8 rendered backgrounds, manual controls preserve scenery, watch mode, white hole, native save/load',backgrounds};
         """
         let persistenceCheck = """
         const saved=JSON.parse(await loadSceneData());
@@ -117,7 +127,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         """
         web.callAsyncJavaScript(persistence ? persistenceCheck : checks, arguments: [:], in: nil, in: .page) { result in
             switch result {
-            case .success(let message): print(message); NSApp.terminate(nil)
+            case .success(let result):
+                if let report = result as? [String:Any], let backgrounds = report["backgrounds"] as? [String:String] {
+                    let folder = FileManager.default.temporaryDirectory.appendingPathComponent("gravity-background-previews", isDirectory: true)
+                    do {
+                        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+                        for (name, value) in backgrounds {
+                            if let encoded = value.split(separator: ",").last, let data = Data(base64Encoded: String(encoded)) {
+                                try data.write(to: folder.appendingPathComponent(name+".png"))
+                            }
+                        }
+                        print(report["message"] ?? "PASS"); print("Rendered backgrounds: \(folder.path)")
+                    } catch { self.fail("Preview export failed: \(error)") }
+                } else { print(result) }
+                NSApp.terminate(nil)
             case .failure(let error): self.fail("SMOKE FAIL: \(error)")
             }
         }

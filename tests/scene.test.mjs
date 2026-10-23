@@ -14,3 +14,10 @@ test('invalid stored scenes are rejected without changing the current playground
  const saved=captureScene(w,settings);
  for(const corrupt of [null,{...saved,version:99},{...saved,balls:[{...saved.balls[0],x:NaN}]},{...saved,holes:[{x:.5,y:.5,kind:'bad',phase:1}]},{...saved,settings:{...saved.settings,gravity:31}}]){assert.throws(()=>restoreScene(w,corrupt));assert.equal(w.balls[0],b);assert.equal(w.holes.length,1);}
 });
+test('custom gravity retains its saved backdrop and old scenes inherit their environment',()=>{
+ const w=new World();w.add(200,200);
+ const saved=captureScene(w,{...settings,environment:null,backdrop:'water'});
+ const restored=restoreScene(new World(),saved);assert.equal(restored.environment,null);assert.equal(restored.backdrop,'water');
+ delete saved.settings.backdrop;saved.settings.environment='moon';assert.equal(restoreScene(new World(),saved).backdrop,'moon');
+ saved.settings.backdrop='invalid';assert.throws(()=>restoreScene(w,saved));
+});

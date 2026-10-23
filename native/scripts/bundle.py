@@ -7,7 +7,7 @@ css=(root/'dist/style.css').read_text()
 css=re.sub(r'@import[^;]+;','',css)
 css=css.replace("'DM Sans','Noto Sans KR',sans-serif", "-apple-system,'Helvetica Neue','Apple SD Gothic Neo',sans-serif").replace("'DM Sans',sans-serif", "-apple-system,sans-serif")
 parts=[]
-for file in ['physics.mjs','environments.mjs','scene.mjs','storage.mjs','app.js']:
+for file in ['physics.mjs','backdrops.mjs','environments.mjs','scene.mjs','storage.mjs','app.js']:
     js=(root/'dist'/file).read_text()
     js=re.sub(r'^import .*?;\n','',js,flags=re.M)
     js=re.sub(r'^export ', '', js, flags=re.M)

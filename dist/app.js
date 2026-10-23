@@ -1,9 +1,11 @@
+import {BackdropRenderer} from './backdrops.mjs';
 import {ENVIRONMENTS,applyEnvironment} from './environments.mjs';
 import {saveSceneData,loadSceneData} from './storage.mjs';
 import {World,MAX_BALLS} from './physics.mjs';
 import {captureScene,restoreScene} from './scene.mjs';
 const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s),canvas=$('#world'),ctx=canvas.getContext('2d'),wrap=$('#canvas-wrap');
-const world=new World();let tool='throw',size='random',direction='down',paused=false,raining=false,showTrails=false,drag=null,frame=0,last=0,acc=0,rainClock=0,toastTimer,chaosClock=0,chaos=false,watching=false,environment='earth';
+const scenery=new BackdropRenderer();
+const world=new World();let tool='throw',size='random',direction='down',paused=false,raining=false,showTrails=false,drag=null,frame=0,last=0,acc=0,rainClock=0,toastTimer,chaosClock=0,chaos=false,watching=false,environment='earth',backdrop='earth';
 const dirs={up:[0,-1,'위로 ↑'],right:[1,0,'오른쪽 →'],down:[0,1,'아래로 ↓'],left:[-1,0,'왼쪽 ←'],zero:[0,0,'무중력 ✧']};
 function toast(s){$('#toast').textContent=s;$('#toast').classList.add('visible');clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('#toast').classList.remove('visible'),2300);}
 function resize(){const r=canvas.getBoundingClientRect(),w=r.width,h=r.height,oldW=world.width,oldH=world.height;world.width=w;world.height=h;const dpr=Math.min(window.devicePixelRatio||1,2);canvas.width=Math.round(w*dpr);canvas.height=Math.round(h*dpr);ctx.setTransform(dpr,0,0,dpr,0,0);for(const b of world.balls){b.x*=w/oldW;b.y*=h/oldH;b.trail=[];world.boundary(b);}for(const hole of world.holes){hole.x*=w/oldW;hole.y*=h/oldH;}}
@@ -26,8 +28,10 @@ $$('[data-size]').forEach(b=>b.onclick=()=>{size=b.dataset.size;$('#size-value')
 function releaseDrag(){if(drag?.ball)drag.ball.held=false;drag=null;}
 function selectTool(t){releaseDrag();tool=t;$$('[data-tool]').forEach(b=>{b.classList.toggle('active',b.dataset.tool===t);b.setAttribute('aria-pressed',b.dataset.tool===t);});$('#hint').textContent=({throw:'클릭하면 공이 톡! 드래그하면 쓱 날아가요.',grab:'공을 잡아 옮긴 뒤 놓으면, 휙! 날아가요.',hole:'빈 곳을 눌러 블랙홀 설치. 다시 누르면 사라져요.',white:'블랙홀이 삼킨 공이 여기서 나와요. 다시 누르면 삭제.'})[t];$('#hint-icon').textContent=({throw:'↗',grab:'✥',hole:'◉',white:'◎'})[t];canvas.style.cursor=t==='grab'?'grab':'crosshair';}
 $$('[data-tool]').forEach(b=>b.onclick=()=>selectTool(b.dataset.tool));
+function setBackdrop(name){scenery.setTheme(name);backdrop=scenery.name;document.body.dataset.backdrop=backdrop;}
 function showEnvironment(name){
  const env=ENVIRONMENTS[name];document.body.dataset.environment=name||'custom';
+ setBackdrop(name||'earth');
  $('#environment-note').textContent=env?env.note:'내 맘대로 · 중력과 탄성을 자유롭게';
  $$('[data-preset]').forEach(b=>{b.classList.toggle('active',b.dataset.preset===name);b.setAttribute('aria-pressed',b.dataset.preset===name);});
 }
@@ -66,12 +70,12 @@ function setWatching(value){
 }
 $('#watch').onclick=()=>setWatching(true);$('#exit-watch').onclick=()=>setWatching(false);
 $('#save-layout').onclick=async()=>{
- try{await saveSceneData(JSON.stringify(captureScene(world,{size,direction,gravity:Number($('#gravity').value),raining,showTrails,chaos,environment})));toast('지금의 공과 배치를 저장했어요.');}
+ try{await saveSceneData(JSON.stringify(captureScene(world,{size,direction,gravity:Number($('#gravity').value),raining,showTrails,chaos,environment,backdrop})));toast('지금의 공과 배치를 저장했어요.');}
  catch{toast('저장 공간을 사용할 수 없어요.');}
 };
 $('#load-layout').onclick=async()=>{
  try{const raw=await loadSceneData();if(!raw){toast('먼저 마음에 드는 배치를 저장해보세요.');return;}
- const settings=restoreScene(world,JSON.parse(raw));releaseDrag();environment=settings.environment;showEnvironment(environment);
+ const settings=restoreScene(world,JSON.parse(raw));releaseDrag();environment=settings.environment;showEnvironment(environment);setBackdrop(settings.backdrop);
  $('#gravity').value=settings.gravity;setGravity(settings.direction);setBounce(world.restitution*100);
  $('#attraction').value=world.attraction;$('#attraction').dispatchEvent(new Event('input'));
  $('[data-size="'+settings.size+'"]').click();raining=settings.raining;$('#rain').setAttribute('aria-pressed',raining);$('#rain').textContent=raining?'☂ 공 비 멈추기':'☂ 공 비 내리기';
@@ -95,7 +99,7 @@ function drawWhiteHole(h,t){
  ctx.shadowBlur=20;ctx.shadowColor='#e2fff4';ctx.fillStyle='#fffff8';ctx.beginPath();ctx.arc(0,0,h.r,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;ctx.strokeStyle='#89bfa9';ctx.lineWidth=1.5;ctx.stroke();
  if(h.pulse>0){ctx.globalAlpha=h.pulse*.6;ctx.beginPath();ctx.arc(0,0,22+(1-h.pulse)*35,0,Math.PI*2);ctx.stroke();}ctx.restore();
 }
-function draw(t){ctx.clearRect(0,0,world.width,world.height);if(showTrails){for(const b of world.balls){if(b.trail.length<2)continue;ctx.beginPath();ctx.moveTo(b.trail[0].x,b.trail[0].y);for(const p of b.trail)ctx.lineTo(p.x,p.y);ctx.strokeStyle=b.color+'65';ctx.lineWidth=Math.max(1,b.r*.18);ctx.stroke();}}for(const h of world.holes)drawHole(h,t);
+function draw(t){ctx.clearRect(0,0,world.width,world.height);scenery.draw(ctx,world.width,world.height,t);if(showTrails){for(const b of world.balls){if(b.trail.length<2)continue;ctx.beginPath();ctx.moveTo(b.trail[0].x,b.trail[0].y);for(const p of b.trail)ctx.lineTo(p.x,p.y);ctx.strokeStyle=b.color+'65';ctx.lineWidth=Math.max(1,b.r*.18);ctx.stroke();}}for(const h of world.holes)drawHole(h,t);
  for(const b of world.balls){ctx.save();ctx.translate(b.x,b.y);ctx.shadowColor='#46534318';ctx.shadowBlur=4;ctx.shadowOffsetY=3;const grad=ctx.createRadialGradient(-b.r*.35,-b.r*.4,b.r*.05,0,0,b.r);grad.addColorStop(0,lighten(b.color));grad.addColorStop(.6,b.color);grad.addColorStop(1,b.color);ctx.fillStyle=grad;ctx.beginPath();ctx.arc(0,0,b.r,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;ctx.shadowOffsetY=0;ctx.strokeStyle='#ffffff4d';ctx.lineWidth=.8;ctx.stroke();ctx.beginPath();ctx.ellipse(-b.r*.3,-b.r*.4,b.r*.23,b.r*.13,-.6,0,Math.PI*2);ctx.fillStyle='#ffffff45';ctx.fill();if(b.held){ctx.beginPath();ctx.arc(0,0,b.r+5,0,Math.PI*2);ctx.strokeStyle='#657d60';ctx.setLineDash([3,3]);ctx.stroke();}ctx.restore();}
  if(drag&&!drag.ball){const a=drag.start,b=drag.current;ctx.save();ctx.strokeStyle='#6b8170';ctx.fillStyle='#6b817025';ctx.lineWidth=1.5;ctx.setLineDash([4,5]);ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();ctx.setLineDash([]);ctx.beginPath();ctx.arc(a.x,a.y,16,0,Math.PI*2);ctx.fill();ctx.stroke();const angle=Math.atan2(b.y-a.y,b.x-a.x);ctx.beginPath();ctx.moveTo(b.x-10*Math.cos(angle-.5),b.y-10*Math.sin(angle-.5));ctx.lineTo(b.x,b.y);ctx.lineTo(b.x-10*Math.cos(angle+.5),b.y-10*Math.sin(angle+.5));ctx.stroke();ctx.restore();}}
 const colorCache=new Map();function lighten(hex){if(colorCache.has(hex))return colorCache.get(hex);const nums=hex.slice(1).match(/../g).map(x=>Math.round(parseInt(x,16)*.65+255*.35));const result=`rgb(${nums.join(',')})`;colorCache.set(hex,result);return result;}
