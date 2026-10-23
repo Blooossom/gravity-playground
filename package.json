@@ -1,1 +1,1 @@
-{"name":"gravity-playground","private":true,"type":"module","scripts":{"test":"node --test tests/physics.test.mjs","start":"python3 -m http.server 4173 --directory dist"}}
+{"name":"gravity-playground","private":true,"type":"module","scripts":{"test":"node --test tests/*.test.mjs","start":"python3 -m http.server 4173 --directory dist"}}
